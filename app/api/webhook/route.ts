@@ -143,11 +143,15 @@ async function handleWaitingSnoozeTime(from: string, text: string, context: Reco
 }
 
 async function handleList(from: string) {
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1)
+  // Compute IST midnight by using IST date string
+  const istNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  const todayIST = new Date(istNow)
+  todayIST.setHours(0, 0, 0, 0)
+  const tomorrowIST = new Date(todayIST)
+  tomorrowIST.setDate(tomorrowIST.getDate() + 1)
 
   const { data } = await supabase.from('reminders').select('*').eq('status', 'pending')
-    .gte('due_at', today.toISOString()).lt('due_at', tomorrow.toISOString()).order('due_at')
+    .gte('due_at', todayIST.toISOString()).lt('due_at', tomorrowIST.toISOString()).order('due_at')
 
   if (!data?.length) {
     await sendWhatsAppMessage(from, 'Today no reminders da! 🎉')
