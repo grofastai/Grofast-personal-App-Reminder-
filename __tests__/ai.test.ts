@@ -1,95 +1,100 @@
 import { parseTaskTitle, parseDatetime, parseRecurrence, parseCategory, parseSnoozeTime, computeNextOccurrence } from '@/lib/ai'
 
-const mockCreate = jest.fn()
-jest.mock('@anthropic-ai/sdk', () => ({
-  default: jest.fn().mockImplementation(() => ({
-    messages: { create: mockCreate },
-  })),
-}))
-
-function mockAIResponse(text: string) {
-  mockCreate.mockResolvedValueOnce({
-    content: [{ type: 'text', text }],
-  })
-}
-
-beforeEach(() => mockCreate.mockClear())
-
 describe('parseTaskTitle', () => {
-  it('extracts task title from natural message', async () => {
-    mockAIResponse('Pay EB bill')
-    const result = await parseTaskTitle('Remind me to pay EB bill')
-    expect(result).toBe('Pay EB bill')
+  it('strips "Remind me to" prefix', async () => {
+    expect(await parseTaskTitle('Remind me to pay EB bill')).toBe('pay EB bill')
+  })
+  it('returns raw message if no known prefix', async () => {
+    expect(await parseTaskTitle('Pay EB bill')).toBe('Pay EB bill')
   })
 })
 
 describe('parseDatetime', () => {
-  it('returns a Date for valid datetime expression', async () => {
-    mockAIResponse('2026-06-05T10:00:00+05:30')
-    const result = await parseDatetime('June 5 morning 10')
+  it('parses a future date expression', async () => {
+    const result = await parseDatetime('tomorrow at 10am')
     expect(result).toBeInstanceOf(Date)
-    expect(result?.getMonth()).toBe(5) // June = index 5
+    expect(result!.getTime()).toBeGreaterThan(Date.now())
   })
-
-  it('returns null when AI cannot parse', async () => {
-    mockAIResponse('null')
-    const result = await parseDatetime('garbled text xyz')
-    expect(result).toBeNull()
+  it('returns null for unparseable input', async () => {
+    expect(await parseDatetime('garbled text xyz')).toBeNull()
+  })
+  it('handles Thanglish: kal = tomorrow', async () => {
+    const result = await parseDatetime('kal 9am')
+    expect(result).toBeInstanceOf(Date)
   })
 })
 
 describe('parseRecurrence', () => {
-  it('returns monthly recurrence for "monthly 5th"', async () => {
-    mockAIResponse('{"recurrence":"monthly","recurrence_rule":"Every month on the 5th"}')
-    const result = await parseRecurrence('monthly 5th')
-    expect(result.recurrence).toBe('monthly')
-    expect(result.recurrence_rule).toBe('Every month on the 5th')
-  })
-
   it('returns none for "no"', async () => {
-    mockAIResponse('{"recurrence":"none","recurrence_rule":""}')
-    const result = await parseRecurrence('no')
-    expect(result.recurrence).toBe('none')
+    const r = await parseRecurrence('no')
+    expect(r.recurrence).toBe('none')
+    expect(r.recurrence_rule).toBe('')
+  })
+  it('returns daily for "every day"', async () => {
+    expect((await parseRecurrence('every day')).recurrence).toBe('daily')
+  })
+  it('returns weekly for "weekly"', async () => {
+    expect((await parseRecurrence('weekly')).recurrence).toBe('weekly')
+  })
+  it('returns monthly with day for "monthly 5th"', async () => {
+    const r = await parseRecurrence('monthly 5th')
+    expect(r.recurrence).toBe('monthly')
+    expect(r.recurrence_rule).toContain('5')
+  })
+  it('returns custom for "every 3 days"', async () => {
+    const r = await parseRecurrence('every 3 days')
+    expect(r.recurrence).toBe('custom')
+    expect(r.recurrence_rule).toBe('Every 3 days')
   })
 })
 
 describe('parseCategory', () => {
-  it('categorises "Pay EB bill" as finance', async () => {
-    mockAIResponse('finance')
-    const result = await parseCategory('Pay EB bill')
-    expect(result).toBe('finance')
+  it('classifies "pay EB bill" as finance', async () => {
+    expect(await parseCategory('pay EB bill')).toBe('finance')
   })
-
-  it('falls back to "other" for unrecognised category', async () => {
-    mockAIResponse('something_weird')
-    const result = await parseCategory('random task')
-    expect(result).toBe('other')
+  it('classifies "doctor appointment" as health', async () => {
+    expect(await parseCategory('doctor appointment')).toBe('health')
+  })
+  it('classifies "team meeting" as professional', async () => {
+    expect(await parseCategory('team meeting')).toBe('professional')
+  })
+  it('classifies "birthday party" as personal', async () => {
+    expect(await parseCategory('birthday party')).toBe('personal')
+  })
+  it('defaults to other for unrecognised title', async () => {
+    expect(await parseCategory('random stuff xyz')).toBe('other')
   })
 })
 
 describe('parseSnoozeTime', () => {
-  it('returns a new Date for snooze expression', async () => {
-    mockAIResponse('2026-06-06T10:00:00+05:30')
-    const result = await parseSnoozeTime('tomorrow same time', '2026-06-05T10:00:00+05:30')
+  it('parses a future snooze time', async () => {
+    const result = await parseSnoozeTime('tomorrow at 3pm', new Date().toISOString())
     expect(result).toBeInstanceOf(Date)
   })
-
-  it('returns null when AI cannot parse snooze', async () => {
-    mockAIResponse('null')
-    const result = await parseSnoozeTime('blah blah', '2026-06-05T10:00:00+05:30')
-    expect(result).toBeNull()
+  it('returns null for unparseable snooze', async () => {
+    expect(await parseSnoozeTime('blah blah blah', new Date().toISOString())).toBeNull()
   })
 })
 
 describe('computeNextOccurrence', () => {
-  it('returns next Date for a monthly reminder', async () => {
-    mockAIResponse('2026-07-05T10:00:00+05:30')
-    const result = await computeNextOccurrence({
-      due_at: '2026-06-05T10:00:00+05:30',
-      recurrence: 'monthly',
-      recurrence_rule: 'Every month on the 5th',
-    })
-    expect(result).toBeInstanceOf(Date)
-    expect(result.getMonth()).toBe(6) // July = index 6
+  it('adds 1 day for daily', async () => {
+    const due = '2026-06-05T10:00:00+05:30'
+    const next = await computeNextOccurrence({ due_at: due, recurrence: 'daily', recurrence_rule: 'Every day' })
+    expect(next.getDate()).toBe(new Date(due).getDate() + 1)
+  })
+  it('adds 7 days for weekly', async () => {
+    const due = '2026-06-05T10:00:00+05:30'
+    const next = await computeNextOccurrence({ due_at: due, recurrence: 'weekly', recurrence_rule: 'Every week' })
+    expect(next.getTime() - new Date(due).getTime()).toBe(7 * 24 * 60 * 60 * 1000)
+  })
+  it('adds 1 month for monthly', async () => {
+    const due = '2026-06-05T10:00:00+05:30'
+    const next = await computeNextOccurrence({ due_at: due, recurrence: 'monthly', recurrence_rule: 'Every month' })
+    expect(next.getMonth()).toBe(new Date(due).getMonth() + 1)
+  })
+  it('handles custom "every 3 days"', async () => {
+    const due = '2026-06-05T10:00:00+05:30'
+    const next = await computeNextOccurrence({ due_at: due, recurrence: 'custom', recurrence_rule: 'Every 3 days' })
+    expect(next.getTime() - new Date(due).getTime()).toBe(3 * 24 * 60 * 60 * 1000)
   })
 })
