@@ -1,4 +1,4 @@
-import { parseTaskTitle, parseDatetime, parseRecurrence, parseCategory, parseSnoozeTime, computeNextOccurrence } from '@/lib/ai'
+import { parseTaskTitle, parseDatetime, parseRecurrence, parseCategory, parsePriority, parseSnoozeTime, computeNextOccurrence } from '@/lib/ai'
 
 describe('parseTaskTitle', () => {
   it('strips "Remind me to" prefix', async () => {
@@ -63,6 +63,24 @@ describe('parseCategory', () => {
   })
   it('defaults to other for unrecognised title', async () => {
     expect(await parseCategory('random stuff xyz')).toBe('other')
+  })
+})
+
+describe('parsePriority', () => {
+  it('returns critical for urgent keywords', async () => {
+    expect(await parsePriority('pay EB bill URGENT')).toBe('critical')
+  })
+  it('returns critical for "last date"', async () => {
+    expect(await parsePriority('last date to submit form')).toBe('critical')
+  })
+  it('returns important for meeting', async () => {
+    expect(await parsePriority('client meeting at 3pm')).toBe('important')
+  })
+  it('returns important for deadline', async () => {
+    expect(await parsePriority('project deadline tomorrow')).toBe('important')
+  })
+  it('returns normal for everyday tasks', async () => {
+    expect(await parsePriority('buy groceries')).toBe('normal')
   })
 })
 

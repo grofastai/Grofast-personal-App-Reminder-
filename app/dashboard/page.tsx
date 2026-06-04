@@ -5,6 +5,15 @@ import { ReminderCard, type Reminder } from '@/components/ReminderCard'
 import { AddReminderForm } from '@/components/AddReminderForm'
 import Link from 'next/link'
 
+const PRIORITY_ORDER: Record<string, number> = { critical: 0, important: 1, normal: 2 }
+
+function sortByPriority(reminders: Reminder[]) {
+  return [...reminders].sort((a, b) => {
+    const po = (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2)
+    return po !== 0 ? po : new Date(a.due_at).getTime() - new Date(b.due_at).getTime()
+  })
+}
+
 function groupByDay(reminders: Reminder[]) {
   const now = new Date()
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
@@ -12,9 +21,9 @@ function groupByDay(reminders: Reminder[]) {
   const dayAfterStart = new Date(tomorrowStart); dayAfterStart.setDate(dayAfterStart.getDate() + 1)
 
   return {
-    today: reminders.filter(r => { const d = new Date(r.due_at); return d >= todayStart && d < tomorrowStart }),
-    tomorrow: reminders.filter(r => { const d = new Date(r.due_at); return d >= tomorrowStart && d < dayAfterStart }),
-    upcoming: reminders.filter(r => new Date(r.due_at) >= dayAfterStart),
+    today:    sortByPriority(reminders.filter(r => { const d = new Date(r.due_at); return d >= todayStart && d < tomorrowStart })),
+    tomorrow: sortByPriority(reminders.filter(r => { const d = new Date(r.due_at); return d >= tomorrowStart && d < dayAfterStart })),
+    upcoming: sortByPriority(reminders.filter(r => new Date(r.due_at) >= dayAfterStart)),
   }
 }
 

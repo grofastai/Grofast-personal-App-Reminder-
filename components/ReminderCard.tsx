@@ -4,10 +4,16 @@ export type Reminder = {
   id: string
   title: string
   category: string
+  priority: string
   due_at: string
   recurrence: string
   recurrence_rule: string
   status: string
+}
+
+const PRIORITY_BADGE: Record<string, string> = {
+  critical: '🔴',
+  important: '🟠',
 }
 
 const CATEGORY_EMOJI: Record<string, string> = {
@@ -41,7 +47,12 @@ export function ReminderCard({
       <div className="flex items-start gap-3 flex-1 min-w-0">
         <span className="text-xl mt-0.5">{emoji}</span>
         <div className="min-w-0">
-          <p className="font-medium text-gray-900 truncate">{reminder.title}</p>
+          <p className="font-medium text-gray-900 truncate">
+            {PRIORITY_BADGE[reminder.priority] && (
+              <span className="mr-1">{PRIORITY_BADGE[reminder.priority]}</span>
+            )}
+            {reminder.title}
+          </p>
           <p className="text-sm text-gray-500 mt-0.5">⏰ {due}</p>
           {reminder.recurrence !== 'none' && reminder.recurrence_rule && (
             <p className="text-xs text-gray-400 mt-0.5">🔁 {reminder.recurrence_rule}</p>

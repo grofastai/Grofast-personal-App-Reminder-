@@ -51,6 +51,13 @@ export async function parseRecurrence(message: string): Promise<{ recurrence: st
   return { recurrence: 'none', recurrence_rule: '' }
 }
 
+export async function parsePriority(message: string): Promise<string> {
+  const lower = message.toLowerCase()
+  if (/\b(urgent|asap|immediately|critical|emergency|last date|due today|overdue|must do|deadline today|expire|final reminder|very important)\b/.test(lower)) return 'critical'
+  if (/\b(important|meeting|client|deadline|follow.?up|presentation|interview|report|salary|payment due|bill|submit)\b/.test(lower)) return 'important'
+  return 'normal'
+}
+
 export async function parseCategory(taskTitle: string): Promise<string> {
   const lower = taskTitle.toLowerCase()
   if (/\b(work|meeting|office|email|client|project|deadline|report|call|task|presentation|interview|boss|standup|sprint)\b/.test(lower)) return 'professional'

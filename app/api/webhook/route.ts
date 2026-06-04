@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
-import { parseTaskTitle, parseDatetime, parseRecurrence, parseCategory, parseSnoozeTime } from '@/lib/ai'
+import { parseTaskTitle, parseDatetime, parseRecurrence, parseCategory, parsePriority, parseSnoozeTime } from '@/lib/ai'
 
 const IST_OPTS: Intl.DateTimeFormatOptions = { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }
 
@@ -64,9 +64,9 @@ async function setConv(whatsappNumber: string, state: string, context: Record<st
 }
 
 async function handleNewReminder(from: string, text: string) {
-  const title = await parseTaskTitle(text)
+  const [title, priority] = await Promise.all([parseTaskTitle(text), parsePriority(text)])
   await sendWhatsAppMessage(from, `Ok! "${title}" remind panren 💡\nEppo remind pannanum? (date and time sollu)`)
-  await setConv(from, 'waiting_time', { title })
+  await setConv(from, 'waiting_time', { title, priority })
   return ok()
 }
 
@@ -88,9 +88,12 @@ async function handleWaitingRecurrence(from: string, text: string, context: Reco
     parseCategory(context.title as string),
   ])
 
+  const priority = (context.priority as string) ?? 'normal'
+
   await supabase.from('reminders').insert({
     title: context.title,
     category,
+    priority,
     due_at: context.due_at,
     recurrence,
     recurrence_rule,
